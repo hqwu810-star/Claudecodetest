@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基于 DeepSeek-TUI 构建 GUI 客户端 — 深度分析与实施路线图</title>
+<style>
+  :root {
+    --codex: #10a37f;
+    --deepseek: #4f6df5;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-light: #1d2129;
+    --text: #e6e8eb;
+    --muted: #9aa3af;
+    --border: #2a2f3a;
+    --warn: #f5a524;
+    --good: #34d399;
+    --bad: #f87171;
+    --accent: #8aa0ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+  header {
+    padding: 36px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  h1 {
+    font-size: 30px;
+    margin: 0 0 8px;
+    background: linear-gradient(90deg, var(--codex), var(--deepseek));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--muted); font-size: 15px; }
+  h2 {
+    font-size: 22px;
+    margin: 44px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 18px; margin: 28px 0 12px; color: #c9d1d9; }
+  h4 { font-size: 15px; margin: 20px 0 10px; color: var(--accent); }
+  p { margin: 10px 0; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    background: #232830;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+  pre {
+    background: #0b0d12;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  pre code { background: transparent; padding: 0; font-size: 13px; }
+  .lang-tag {
+    display: inline-block;
+    background: #2a2f3a;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: -8px;
+    position: relative;
+    top: -8px;
+    font-family: monospace;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; }
+  tr:nth-child(even) td { background: #14171d; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tag-codex { background: rgba(16,163,127,0.18); color: var(--codex); }
+  .tag-ds { background: rgba(79,109,245,0.20); color: #8aa0ff; }
+  .tag-good { background: rgba(52,211,153,0.18); color: var(--good); }
+  .tag-warn { background: rgba(245,165,36,0.18); color: var(--warn); }
+  .tag-bad  { background: rgba(248,113,113,0.18); color: var(--bad); }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card.codex { border-top: 3px solid var(--codex); }
+  .card.ds    { border-top: 3px solid var(--deepseek); }
+  .card.warn  { border-top: 3px solid var(--warn); }
+  .card.good  { border-top: 3px solid var(--good); }
+  .card h4 { margin: 0 0 10px; font-size: 15px; color: var(--text); }
+  .callout {
+    background: rgba(245,165,36,0.08);
+    border-left: 4px solid var(--warn);
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .callout.info  { background: rgba(79,109,245,0.08); border-left-color: var(--deepseek); }
+  .callout.good  { background: rgba(52,211,153,0.08); border-left-color: var(--good); }
+  .callout.bad   { background: rgba(248,113,113,0.08); border-left-color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 22px;
+    margin-bottom: 24px;
+  }
+  .toc ol { padding-left: 22px; margin: 6px 0; }
+  .toc a { color: #aab8ff; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .plan-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .plan-badge {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .plan-A .plan-badge { color: var(--good); border-color: var(--good); }
+  .plan-B .plan-badge { color: var(--warn); border-color: var(--warn); }
+  .plan-C .plan-badge { color: var(--bad);  border-color: var(--bad);  }
+  .file-ref {
+    display: inline-block;
+    background: rgba(79,109,245,0.10);
+    color: #aab8ff;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+    border: 1px solid rgba(79,109,245,0.25);
+  }
+  .arrow { color: var(--muted); margin: 0 4px; }
+  .layered {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin: 12px 0;
+  }
+  .layer {
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-bottom: none;
+  }
+  .layer:last-child { border-bottom: 1px solid var(--border); border-radius: 0 0 8px 8px; }
+  .layer:first-child { border-radius: 8px 8px 0 0; }
+  .layer-l1 { background: rgba(16,163,127,0.10); }
+  .layer-l2 { background: rgba(79,109,245,0.10); }
+  .layer-l3 { background: rgba(245,165,36,0.08); }
+  .layer-l4 { background: rgba(248,113,113,0.08); }
+  .checklist li { list-style-type: none; position: relative; margin-left: -8px; }
+  .checklist li::before { content: "▢ "; color: var(--muted); margin-right: 6px; }
+  .checklist li.done::before { content: "▣ "; color: var(--good); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>基于 DeepSeek-TUI 构建 GUI 客户端</h1>
+  <div class="subtitle">
+    源码级深度分析与三档实施路线图
+    &nbsp;·&nbsp;
+    <span class="tag tag-codex">参照 openai/codex 架构</span>
+    &nbsp;·&nbsp;
+    <span class="tag tag-ds">改造 Hmbown/DeepSeek-TUI v0.8.36</span>
+    &nbsp;·&nbsp; 2026-05-14
+  </div>
+</header>
+
+<div class="toc">
+  <strong>目录</strong>
+  <ol>
+    <li><a href="#tldr">TL;DR — 三句话结论</a></li>
+    <li><a href="#why-codex-gui">为什么 Codex 能轻松做 GUI</a></li>
+    <li><a href="#ds-status">DeepSeek-TUI 当前 GUI-readiness 现状</a></li>
+    <li><a href="#gap">差距详细对照表</a></li>
+    <li><a href="#plan-a">方案 A：1 周原型（子进程 + JSON 流）</a></li>
+    <li><a href="#plan-b">方案 B：2-4 周生产级（SSE/WebSocket + SDK）</a></li>
+    <li><a href="#plan-c">方案 C：Codex 级（JSON-RPC + 多传输 + 多版本协议）</a></li>
+    <li><a href="#frontend">前端技术栈选择</a></li>
+    <li><a href="#first-week">第一周可落地的具体清单</a></li>
+  </ol>
+</div>
+
+<section id="tldr">
+<h2>1. TL;DR — 三句话结论</h2>
+
+<div class="callout info">
+  <p><strong>① 协议层已有 80% 基础：</strong>
+  DS <span class="file-ref">crates/protocol/src/lib.rs:392</span> 已经定义了
+  <code>EventFrame</code> 枚举（<code>ResponseStart/Delta/End</code>、<code>ToolCallStart/Result</code>、
+  <code>ExecApprovalRequest</code>、<code>McpToolCallBegin/End</code> 等 15+ 种事件），
+  这是 Codex GUI 协议的核心，DS 已经具备。</p>
+
+  <p><strong>② 传输层是最大短板：</strong>
+  DS <span class="file-ref">crates/app-server/src/lib.rs:101</span> 的 <code>/prompt</code> 路由
+  <strong>不是流式</strong> —— <code>prompt_handler</code> 把所有 <code>EventFrame</code>
+  打包成 <code>Vec&lt;EventFrame&gt;</code> 一次性返回。Codex 把这块拆成专门的
+  <code>app-server-transport</code> crate（stdio + unix socket + WebSocket 三种传输），
+  这是 DS 必须新增的层。</p>
+
+  <p><strong>③ SDK 完全缺失：</strong>
+  Codex 提供 <code>@openai/codex-sdk</code>（TS）和 Python SDK，
+  通过 <code>codex exec --experimental-json</code> 子进程模式让任意 Electron/Tauri/Web
+  应用都能消费事件流。DS 没有任何官方客户端 SDK。这是最容易补齐的部分。</p>
+</div>
+
+<p><strong>结论性建议：</strong>分三档落地，先做方案 A 验证 PMF，再决定是否升级到 B/C。
+不需要一开始就照搬 Codex 的 90+ crate 工程化结构。</p>
+</section>
+
+<section id="why-codex-gui">
+<h2>2. 为什么 Codex 能轻松做 GUI</h2>
+
+<p>从源码看，Codex 的"GUI-ready"不是一个特性，而是<strong>一整套分层架构</strong>。
+我把它分成 4 层：</p>
+
+<div class="layered">
+  <div class="layer layer-l1">
+    <strong>L4 · 客户端 SDK 层</strong> &nbsp;
+    <span class="file-ref">sdk/typescript/</span>
+    <span class="file-ref">sdk/python/</span>
+    <br>
+    <code>@openai/codex-sdk</code> 暴露 <code>Codex.startThread()</code> / <code>thread.runStreamed()</code>，
+    内部 <code>spawn("codex", ["exec", "--experimental-json"])</code> 拉起子进程，
+    逐行解析 stdout 的 JSONL，把 <code>ThreadEvent</code> 透给 GUI。
+  </div>
+  <div class="layer layer-l2">
+    <strong>L3 · 协议层（带版本）</strong> &nbsp;
+    <span class="file-ref">codex-rs/app-server-protocol/src/protocol/v1.rs</span>
+    <span class="file-ref">.../v2/</span>
+    <br>
+    JSON-RPC 风格的 <code>InitializeParams</code> / <code>InitializeResponse</code>，
+    带 <code>InitializeCapabilities</code> 协商。v2 把领域拆成 27 个文件
+    （<code>thread.rs / turn.rs / command_exec.rs / fs.rs / hook.rs / mcp.rs / model.rs / notification.rs ...</code>）。
+    <strong>用 <code>schemars::JsonSchema</code> + <code>ts_rs::TS</code> 宏</strong>
+    自动导出 JSON Schema 和 TS 类型 —— GUI 永远不会和后端漂移。
+  </div>
+  <div class="layer layer-l3">
+    <strong>L2 · 传输层</strong> &nbsp;
+    <span class="file-ref">codex-rs/app-server-transport/src/transport/</span>
+    <br>
+    <code>stdio.rs</code> / <code>unix_socket.rs</code> / <code>websocket.rs</code> / <code>remote_control/</code>
+    四种实现，统一接口 <code>AppServerTransport</code>。
+    <strong>桌面 GUI 用 unix socket 或 stdio，Web 客户端用 WebSocket，云控用 remote_control</strong>，
+    同一个二进制不改 core。
+  </div>
+  <div class="layer layer-l4">
+    <strong>L1 · 引擎层（与传输无关）</strong> &nbsp;
+    <span class="file-ref">codex-rs/core/</span>
+    <br>
+    Agent 主循环、turn-loop、工具执行、沙箱 —— 这一层完全不知道是谁在调它，
+    通过 <code>OutgoingMessage</code> / <code>TransportEvent</code> 与 L2 解耦。
+  </div>
+</div>
+
+<h3>2.1 一个具体例子：协议 + 类型导出</h3>
+<div class="lang-tag">Rust · codex-rs/app-server-protocol/src/protocol/v1.rs:26</div>
+<pre><code>#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default,
+         JsonSchema, TS)]            // ← 关键：JsonSchema + TS 两个派生
+#[serde(rename_all = "camelCase")]    // ← GUI 友好的 camelCase
+pub struct InitializeParams {
+    pub client_info: ClientInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option&lt;InitializeCapabilities&gt;,
+}</code></pre>
+
+<p>构建时 <code>ts_rs</code> 自动生成等价的 <code>InitializeParams.ts</code>，
+<code>schemars</code> 生成 JSON Schema 用于校验和文档。GUI 拿到 TS 类型直接 import 即可。</p>
+
+<h3>2.2 SDK 如何"看上去像本地 API"</h3>
+<div class="lang-tag">TypeScript · sdk/typescript/src/exec.ts:73</div>
+<pre><code>async *run(args: CodexExecArgs): AsyncGenerator&lt;string&gt; {
+  const commandArgs: string[] = ["exec", "--experimental-json"];
+  // ... 构造 --model / --sandbox / --cd 等参数
+  const child = spawn(this.executablePath, commandArgs, {...});
+  const rl = readline.createInterface({ input: child.stdout });
+  for await (const line of rl) {
+    yield line;        // ← 每行就是一个 ThreadEvent JSON
+  }
+}</code></pre>
+
+<p>调用方 (GUI) 用法：</p>
+<div class="lang-tag">TypeScript · sdk/typescript/samples/basic_streaming.ts:23</div>
+<pre><code>import { Codex } from "@openai/codex-sdk";
+const codex = new Codex();
+const thread = codex.startThread();
+for await (const event of thread.runStreamed("Refactor foo.rs")) {
+  switch (event.type) {
+    case "item.started":   updateUI(event.item, "started");   break;
+    case "item.updated":   updateUI(event.item, "updated");   break;
+    case "item.completed": updateUI(event.item, "completed"); break;
+    case "turn.completed": showUsage(event.usage);            break;
+  }
+}</code></pre>
+
+<div class="callout good">
+  <strong>关键认知：</strong> Codex 的 GUI 不需要重新实现一遍 agent，
+  它就是<strong>同一个 <code>codex</code> 二进制 + 一个薄前端</strong>。
+  整个 SDK 才 ~3,300 行 TS。这就是分层带来的杠杆。
+</div>
+</section>
+
+<section id="ds-status">
+<h2>3. DeepSeek-TUI 当前 GUI-readiness 现状</h2>
+
+<h3>3.1 好消息：协议层已经接近就绪</h3>
+<p>DS 在单一 <span class="file-ref">crates/protocol/src/lib.rs</span> 里已经定义了 GUI 所需的全部事件类型：</p>
+
+<div class="lang-tag">Rust · crates/protocol/src/lib.rs:392</div>
+<pre><code>pub enum EventFrame {
+    ResponseStart  { response_id: String },
+    ResponseDelta  { response_id: String, delta: String,
+                     channel: ResponseChannel /* Text | Reasoning */ },
+    ResponseEnd    { response_id: String },
+    ToolCallStart  { response_id: String, tool_name: String, arguments: Value },
+    ToolCallResult { response_id: String, tool_name: String, output: Value },
+    McpStartupUpdate   { update: McpStartupUpdateEvent },
+    McpStartupComplete { summary: McpStartupCompleteEvent },
+    McpToolCallBegin   { server_name: String, tool_name: String },
+    McpToolCallEnd     { server_name: String, tool_name: String, ok: bool },
+    ExecApprovalRequest      { request: ExecApprovalRequestEvent },
+    ApplyPatchApprovalRequest { request: ExecApprovalRequestEvent },
+    ElicitationRequest { server_name: String, request_id: String, prompt: String },
+    ExecCommandBegin   { command: String /* ... */ },
+    // ... 还有更多
+}</code></pre>
+
+<p>这些事件已经是 GUI 可以直接消费的"item-shaped"数据 ——
+与 Codex 的 <code>ThreadEvent</code> 90% 同构。</p>
+
+<h3>3.2 坏消息：传输层是"伪 HTTP"</h3>
+<p>DS 的 <span class="file-ref">crates/app-server/src/lib.rs</span> 把所有路由都做成
+"一发一收"的 POST，没有任何流式输出：</p>
+
+<div class="lang-tag">Rust · crates/app-server/src/lib.rs:98-105</div>
+<pre><code>let app = Router::new()
+    .route("/healthz",      get(healthz))
+    .route("/thread",       post(thread_handler))
+    .route("/app",          post(app_handler))
+    .route("/prompt",       post(prompt_handler))      // ← 不是流式
+    .route("/tool",         post(tool_handler))
+    .route("/jobs",         get(jobs_handler))
+    .route("/mcp/startup",  post(mcp_startup_handler));</code></pre>
+
+<div class="lang-tag">Rust · crates/app-server/src/lib.rs:~120 (prompt_handler)</div>
+<pre><code>async fn prompt_handler(
+    State(state): State&lt;AppState&gt;,
+    Json(req): Json&lt;PromptRequest&gt;,
+) -&gt; Json&lt;PromptResponse&gt; {                  // ← 返回 Json，单次
+    let mut runtime = state.runtime.lock().await;
+    let overrides = CliRuntimeOverrides::default();
+    match runtime.handle_prompt(req, &overrides).await {
+        Ok(res) =&gt; Json(res),
+        Err(err) =&gt; Json(PromptResponse {
+            output: err.to_string(),
+            model: "unknown".to_string(),
+            events: Vec::new(),                  // ← events 在 res 里被打包返回
+        }),
+    }
+}</code></pre>
+
+<p>问题是：<code>PromptResponse</code> 里的 <code>events: Vec&lt;EventFrame&gt;</code>
+是 agent 完整跑完后一次性吐出来的。这意味着：</p>
+<ul>
+  <li><strong>GUI 等待整个 turn 结束才能渲染</strong>，没有打字机效果</li>
+  <li><strong>用户没法在工具执行前看到 <code>ExecApprovalRequest</code></strong>，审批流退化为后置摘要</li>
+  <li><strong>5 分钟的长任务期间 UI 完全静止</strong>，无进度条/无 token 计数</li>
+</ul>
+
+<h3>3.3 SDK 与 Web GUI：都不存在</h3>
+<ul>
+  <li><span class="file-ref">deepseek-tui/web/</span> ≠ GUI 客户端 ——
+      它是一个用 Next.js 写的<strong>项目营销官网</strong>
+      （包含 <code>/install</code>、<code>/roadmap</code>、<code>/docs</code>、<code>/feed</code>、
+      <code>/admin</code> 页面）</li>
+  <li><span class="file-ref">deepseek-tui/website/</span> 是更简单的纯静态站</li>
+  <li>没有 <code>sdk/</code> 顶级目录</li>
+  <li><code>npm/deepseek-tui/</code> 只是二进制安装器，没有 JS API</li>
+</ul>
+</section>
+
+<section id="gap">
+<h2>4. 差距详细对照表</h2>
+
+<table>
+<thead><tr><th>层</th><th>Codex 现状</th><th>DS 现状</th><th>差距等级</th></tr></thead>
+<tbody>
+<tr>
+  <td>引擎/工具/沙箱</td>
+  <td><code>core</code> + 4 个沙箱 crate</td>
+  <td><code>core</code> 单文件 + <code>tui/sandbox</code> 模块</td>
+  <td><span class="tag tag-good">无影响 GUI</span></td>
+</tr>
+<tr>
+  <td>事件类型定义</td>
+  <td><code>ThreadEvent</code> + <code>ThreadItem</code>，27 个 v2 文件</td>
+  <td><code>EventFrame</code> 单文件，覆盖 80% 场景</td>
+  <td><span class="tag tag-good">基本对齐</span></td>
+</tr>
+<tr>
+  <td>协议版本化</td>
+  <td>v1 + v2，<code>InitializeCapabilities</code> 协商</td>
+  <td>无版本，无 capability 协商</td>
+  <td><span class="tag tag-warn">中</span></td>
+</tr>
+<tr>
+  <td>类型导出（Rust→TS）</td>
+  <td><code>ts_rs::TS</code> + <code>schemars::JsonSchema</code> 派生</td>
+  <td>无</td>
+  <td><span class="tag tag-warn">中</span></td>
+</tr>
+<tr>
+  <td>流式传输</td>
+  <td>stdio JSONL + unix socket + WebSocket（专门 <code>app-server-transport</code> crate，8,876 行）</td>
+  <td>仅 HTTP POST，无 SSE/WS，<code>prompt_handler</code> 同步阻塞</td>
+  <td><span class="tag tag-bad">阻塞性</span></td>
+</tr>
+<tr>
+  <td>JSON-RPC / 请求路由</td>
+  <td>JSON-RPC lite + 方法名命名空间（<code>thread/start</code>、<code>turn/submit</code>）</td>
+  <td>REST 风格 + AppRequest 单一 enum</td>
+  <td><span class="tag tag-warn">中</span></td>
+</tr>
+<tr>
+  <td>客户端 SDK</td>
+  <td>TS + Python，二进制即 SDK</td>
+  <td>无</td>
+  <td><span class="tag tag-bad">阻塞性</span></td>
+</tr>
+<tr>
+  <td>认证传输</td>
+  <td><code>transport/auth.rs</code>，capability-based</td>
+  <td>无（localhost 信任）</td>
+  <td><span class="tag tag-warn">桌面 OK，云端不行</span></td>
+</tr>
+<tr>
+  <td>桌面 App</td>
+  <td><code>codex app</code> 命令</td>
+  <td>无</td>
+  <td><span class="tag tag-bad">需自行实现</span></td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <strong>关键评估：</strong>
+  DS 距离"可做 GUI" 只差 <strong>两件事</strong> ——
+  ① <strong>把 <code>prompt_handler</code> 改成流式</strong>，
+  ② <strong>写一个最小客户端 SDK</strong>。
+  剩下都是锦上添花。这两件事都不需要动 <code>core</code> crate。
+</div>
+</section>
+
+<section id="plan-a">
+<h2>5. 方案 A：1 周原型（推荐起步）</h2>
+
+<div class="plan-A plan-header">
+  <span class="plan-badge">PLAN A</span>
+  <h3 style="margin:0;border:none;padding:0;">子进程 + JSON 流（仿 Codex SDK 模式）</h3>
+</div>
+
+<p>目标：能跑起来的 Electron/Tauri 桌面 app，端到端打通对话和工具审批。</p>
+
+<h3>5.1 工作量分解</h3>
+<table>
+<thead><tr><th>任务</th><th>位置</th><th>工时</th></tr></thead>
+<tbody>
+<tr>
+  <td>① 给 <code>deepseek</code> CLI 加 <code>--json</code> / <code>--experimental-json</code> 模式</td>
+  <td><span class="file-ref">crates/cli/src/</span></td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td>② 把 <code>handle_prompt</code> 的 <code>EventFrame</code> 实时输出到 stdout（一行一个 JSON）</td>
+  <td><span class="file-ref">crates/core/src/lib.rs</span> 里增加 <code>EventSink</code> trait</td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td>③ 让 <code>ExecApprovalRequest</code> 通过 stdin 接受 <code>{"approve":true}</code></td>
+  <td>新增 stdin reader 在 cli</td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td>④ 写最小 TS SDK（<code>spawn</code> + 行解析）</td>
+  <td>新建 <span class="file-ref">sdk/typescript/</span></td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td>⑤ Electron/Tauri 框架 + 三个 React 组件（消息列表、审批弹窗、输入框）</td>
+  <td>新仓库 <code>deepseek-gui</code></td>
+  <td>2d</td>
+</tr>
+<tr>
+  <td>合计</td>
+  <td></td>
+  <td><strong>~6 工作日</strong></td>
+</tr>
+</tbody>
+</table>
+
+<h3>5.2 关键代码（最小可行）</h3>
+
+<h4>5.2.1 Rust 端：核心引擎给一个 EventSink 接口</h4>
+<div class="lang-tag">Rust · 新增 crates/core/src/event_sink.rs</div>
+<pre><code>use deepseek_protocol::EventFrame;
+use anyhow::Result;
+
+#[async_trait::async_trait]
+pub trait EventSink: Send + Sync {
+    async fn emit(&self, event: EventFrame) -&gt; Result&lt;()&gt;;
+}
+
+// 默认实现：缓冲到 Vec（保持现有 PromptResponse 行为兼容）
+pub struct BufferedSink(pub tokio::sync::Mutex&lt;Vec&lt;EventFrame&gt;&gt;);
+
+// 新实现：JSONL 直接写 stdout
+pub struct StdoutJsonlSink;
+
+#[async_trait::async_trait]
+impl EventSink for StdoutJsonlSink {
+    async fn emit(&self, event: EventFrame) -&gt; Result&lt;()&gt; {
+        let line = serde_json::to_string(&event)?;
+        println!("{line}");           // 行缓冲，子进程客户端逐行读
+        Ok(())
+    }
+}</code></pre>
+
+<p>然后改造 <code>Runtime::handle_prompt</code> 把内部累加 <code>events.push(...)</code>
+的所有地方改成 <code>self.sink.emit(...).await</code>。</p>
+
+<h4>5.2.2 CLI 端：暴露 <code>--json</code></h4>
+<div class="lang-tag">Rust · crates/cli/src/main.rs (示意)</div>
+<pre><code>#[derive(Parser)]
+struct Cli {
+    #[clap(long)]
+    json: bool,         // 触发 JSONL 子进程模式
+
+    prompt: Option&lt;String&gt;,
+}
+
+if cli.json {
+    let sink = Arc::new(StdoutJsonlSink);
+    runtime.set_sink(sink);
+    // 读 stdin 处理 approve/deny
+    tokio::spawn(handle_stdin_approvals(runtime.clone()));
+}</code></pre>
+
+<h4>5.2.3 TypeScript SDK</h4>
+<div class="lang-tag">TypeScript · sdk/typescript/src/index.ts</div>
+<pre><code>import { spawn } from "node:child_process";
+import readline from "node:readline";
+
+export type EventFrame =
+  | { type: "ResponseStart";  response_id: string }
+  | { type: "ResponseDelta";  response_id: string; delta: string; channel: "Text" | "Reasoning" }
+  | { type: "ResponseEnd";    response_id: string }
+  | { type: "ToolCallStart";  response_id: string; tool_name: string; arguments: unknown }
+  | { type: "ToolCallResult"; response_id: string; tool_name: string; output: unknown }
+  | { type: "ExecApprovalRequest"; request: { command: string; cwd: string; reason: string } }
+  // ... 其他
+  ;
+
+export class DeepSeek {
+  constructor(private exe = "deepseek") {}
+
+  async *startThread(prompt: string, opts: { model?: string } = {}): AsyncGenerator&lt;EventFrame&gt; {
+    const args = ["--json"];
+    if (opts.model) args.push("--model", opts.model);
+    args.push(prompt);
+
+    const child = spawn(this.exe, args, { stdio: ["pipe", "pipe", "inherit"] });
+    const rl = readline.createInterface({ input: child.stdout });
+    for await (const line of rl) {
+      try {
+        yield JSON.parse(line) as EventFrame;
+      } catch {/* skip non-json lines */}
+    }
+  }
+
+  approve(child: ChildProcessByStdio&lt;Writable, ...&gt;, response_id: string, approve: boolean) {
+    child.stdin.write(JSON.stringify({ response_id, approve }) + "\n");
+  }
+}</code></pre>
+
+<h4>5.2.4 GUI（React + Tauri/Electron）</h4>
+<div class="lang-tag">TypeScript · gui/src/App.tsx</div>
+<pre><code>import { DeepSeek, type EventFrame } from "@deepseek/sdk";
+
+const ds = new DeepSeek();
+
+function App() {
+  const [messages, setMessages] = useState&lt;Message[]&gt;([]);
+  const [approval, setApproval] = useState&lt;EventFrame | null&gt;(null);
+
+  async function send(prompt: string) {
+    for await (const ev of ds.startThread(prompt)) {
+      switch (ev.type) {
+        case "ResponseDelta":
+          setMessages(prev =&gt; appendDelta(prev, ev));   // 打字机效果
+          break;
+        case "ExecApprovalRequest":
+          setApproval(ev);                              // 弹审批弹窗
+          break;
+        case "ToolCallResult":
+          setMessages(prev =&gt; addToolResult(prev, ev));
+          break;
+      }
+    }
+  }
+  return &lt;ChatView messages={messages} onSend={send} approval={approval} /&gt;;
+}</code></pre>
+
+<div class="callout good">
+  <strong>方案 A 的优势：</strong>
+  <ul>
+    <li>不改 <code>core</code> 的业务逻辑，只加 sink trait 和 cli flag</li>
+    <li>不破坏现有 HTTP <code>app-server</code> —— 完全并存</li>
+    <li>本地 GUI 不需要端口/认证 —— 子进程自带隔离</li>
+    <li>Codex SDK 同样模式跑了 N 个 IDE 插件，验证过</li>
+  </ul>
+</div>
+</section>
+
+<section id="plan-b">
+<h2>6. 方案 B：2-4 周生产级</h2>
+
+<div class="plan-B plan-header">
+  <span class="plan-badge">PLAN B</span>
+  <h3 style="margin:0;border:none;padding:0;">SSE / WebSocket + 类型化 SDK + 类型导出</h3>
+</div>
+
+<p>目标：可以部署到云上让 Web 浏览器直接连，多客户端并发。</p>
+
+<h3>6.1 增量改造清单</h3>
+<ul class="checklist">
+  <li>在 <code>app-server</code> 新增 <code>GET /v1/threads/:id/events</code> 的 SSE 端点</li>
+  <li>用 <code>axum::response::sse::Sse</code> + <code>tokio::sync::broadcast</code>
+      把 <code>EventFrame</code> 推到所有订阅者</li>
+  <li><code>POST /v1/threads</code> 创建 thread，返回 <code>thread_id</code> 和 <code>events_url</code></li>
+  <li><code>POST /v1/threads/:id/approve</code> 处理审批</li>
+  <li>引入 <code>ts-rs</code> 给 <code>EventFrame</code> 等所有协议类型加 <code>#[derive(TS)]</code>，
+      构建时导出 <code>.d.ts</code></li>
+  <li>引入 <code>schemars</code> 生成 OpenAPI/JSON Schema，供文档站和校验</li>
+  <li>引入 <code>tower-http</code> 的 <code>auth</code> + <code>cors</code> + bearer token</li>
+  <li>给 SDK 加 reconnect / heartbeat / 取消语义</li>
+</ul>
+
+<h3>6.2 SSE 路由示例</h3>
+<div class="lang-tag">Rust · crates/app-server/src/sse.rs (新)</div>
+<pre><code>use axum::response::sse::{Event, Sse, KeepAlive};
+use futures::stream::Stream;
+use tokio::sync::broadcast;
+
+pub async fn thread_events(
+    State(state): State&lt;AppState&gt;,
+    Path(thread_id): Path&lt;String&gt;,
+) -&gt; Sse&lt;impl Stream&lt;Item = Result&lt;Event, axum::Error&gt;&gt;&gt; {
+    let rx = state.event_bus.subscribe(&thread_id);
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
+        .filter_map(|res| async move {
+            let frame = res.ok()?;
+            let data  = serde_json::to_string(&frame).ok()?;
+            Some(Ok(Event::default().event(frame.kind()).data(data)))
+        });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}</code></pre>
+
+<h3>6.3 类型导出宏</h3>
+<div class="lang-tag">Rust · crates/protocol/src/lib.rs:392 (改造)</div>
+<pre><code>#[derive(Serialize, Deserialize, Debug, Clone, TS, JsonSchema)]   // ← 新增 TS, JsonSchema
+#[ts(export, export_to = "../../sdk/typescript/src/generated/")]
+#[serde(tag = "type")]
+pub enum EventFrame {
+    ResponseStart  { response_id: String },
+    ResponseDelta  { response_id: String, delta: String, channel: ResponseChannel },
+    // ...
+}</code></pre>
+
+<p><code>cargo test</code> 时 <code>ts_rs</code> 自动写 TS 文件。</p>
+
+<h3>6.4 SDK 升级到通用客户端</h3>
+<div class="lang-tag">TypeScript · sdk/typescript/src/sse-client.ts</div>
+<pre><code>import type { EventFrame } from "./generated/EventFrame";   // ← Rust 导出
+
+export class DeepSeekClient {
+  constructor(private baseUrl: string, private token?: string) {}
+
+  async *streamThread(threadId: string): AsyncGenerator&lt;EventFrame&gt; {
+    const es = new EventSource(`${this.baseUrl}/v1/threads/${threadId}/events`,
+                               { withCredentials: !!this.token });
+    const queue: EventFrame[] = [];
+    let resolve: (() =&gt; void) | null = null;
+    es.onmessage = (e) =&gt; {
+      queue.push(JSON.parse(e.data));
+      resolve?.();
+    };
+    while (true) {
+      while (queue.length) yield queue.shift()!;
+      await new Promise&lt;void&gt;(r =&gt; (resolve = r));
+    }
+  }
+}</code></pre>
+
+<div class="callout">
+  方案 B 完成后，<strong>同一个 SDK 既能给桌面 GUI（自启子进程模式）也能给 Web GUI（HTTP/SSE 模式）</strong>。
+  这就是 Codex 已经达到的状态。
+</div>
+</section>
+
+<section id="plan-c">
+<h2>7. 方案 C：Codex 级（2-3 个月）</h2>
+
+<div class="plan-C plan-header">
+  <span class="plan-badge">PLAN C</span>
+  <h3 style="margin:0;border:none;padding:0;">完整的 app-server-protocol + 多传输 + 协议版本化</h3>
+</div>
+
+<p>只有当 DS 需要支持 IDE 插件、长连接 daemon、远程控制台等多种场景时再上 C。
+直接照搬 Codex 的 6 个 <code>app-server-*</code> crate 拆分：</p>
+
+<div class="grid-3">
+  <div class="card warn">
+    <h4>app-server-protocol</h4>
+    <ul>
+      <li>v1 + v2 双版本，<code>Initialize/Capabilities</code> 协商</li>
+      <li>27 个领域文件：<code>thread / turn / fs / mcp / hook / model / notification / permissions ...</code></li>
+      <li>JSON Schema + TS 自动导出</li>
+    </ul>
+  </div>
+  <div class="card warn">
+    <h4>app-server-transport</h4>
+    <ul>
+      <li><code>stdio.rs</code> — 子进程</li>
+      <li><code>unix_socket.rs</code> — 桌面 daemon</li>
+      <li><code>websocket.rs</code> — Web/远程</li>
+      <li><code>remote_control/</code> — 反向通道</li>
+    </ul>
+  </div>
+  <div class="card warn">
+    <h4>app-server-daemon</h4>
+    <ul>
+      <li>常驻进程模式</li>
+      <li>多客户端并发会话</li>
+      <li>系统 service / launchd / systemd 集成</li>
+    </ul>
+  </div>
+</div>
+
+<p>外加 <code>app-server-client</code>（Rust 客户端）+ <code>app-server-test-client</code>（单测客户端）。
+Codex 这 6 个 crate 加起来约 13 万行，DS 不需要 1:1 复制，
+但<strong>这套分层是必经之路 if 你要做 IDE 插件 / VS Code 扩展</strong>。</p>
+</section>
+
+<section id="frontend">
+<h2>8. 前端技术栈选择</h2>
+
+<div class="grid-3">
+  <div class="card">
+    <h4>Tauri 2（推荐）</h4>
+    <ul>
+      <li>Rust 后端 + Web 前端，<strong>包体 5-15 MB</strong></li>
+      <li>可以把 <code>deepseek-tui-cli</code> 作为侧车 (sidecar) 进程，免单独安装</li>
+      <li>原生菜单/通知/系统托盘</li>
+      <li>与 DS 自身 Rust 技术栈天然契合</li>
+      <li>Windows/macOS/Linux 三端</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>Electron</h4>
+    <ul>
+      <li>生态最成熟，<strong>包体 80-150 MB</strong></li>
+      <li>VS Code、Slack、Discord 都用</li>
+      <li><code>child_process.spawn</code> + IPC 现成模式</li>
+      <li>如果团队是纯前端背景，门槛最低</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>纯 Web（次选）</h4>
+    <ul>
+      <li>不打包桌面，直接浏览器访问 <code>deepseek serve --http</code></li>
+      <li>需要方案 B 的 SSE 支持</li>
+      <li>本机沙箱审批 UX 较差（浏览器无法直接访问本地文件路径）</li>
+      <li>适合云端 SaaS 场景</li>
+    </ul>
+  </div>
+</div>
+
+<h3>UI 框架建议</h3>
+<ul>
+  <li><strong>React + TanStack Query + Zustand</strong> — 主流稳妥</li>
+  <li><strong>shadcn/ui + Tailwind</strong> — 组件库，与 DS 现有 web/ 一致</li>
+  <li><strong>react-markdown + react-syntax-highlighter</strong> — 渲染 agent 输出</li>
+  <li><strong>monaco-editor</strong> — 内嵌代码编辑器（如果做"inline edit"）</li>
+  <li><strong>xterm.js</strong> — 嵌入终端显示工具执行（如果想保留 TUI 风格）</li>
+</ul>
+</section>
+
+<section id="first-week">
+<h2>9. 第一周可落地的具体清单</h2>
+
+<p>如果你今天就开始，按下面顺序做，<strong>到周末能演示一个端到端的桌面对话窗口</strong>：</p>
+
+<table>
+<thead><tr><th>Day</th><th>任务</th><th>产出</th></tr></thead>
+<tbody>
+<tr>
+  <td>Day 1</td>
+  <td>fork DS，在 <code>crates/protocol</code> 里给所有 <code>EventFrame</code> 变体加 <code>#[serde(tag = "type")]</code>（如果还没有），跑 <code>cargo test</code> 验证序列化稳定</td>
+  <td>JSON 输出格式确定</td>
+</tr>
+<tr>
+  <td>Day 2</td>
+  <td>在 <code>crates/core</code> 里定义 <code>EventSink</code> trait，把 <code>Runtime</code> 内部所有 <code>events.push(...)</code> 替换成 <code>self.sink.emit(...).await</code></td>
+  <td>引擎与传输解耦</td>
+</tr>
+<tr>
+  <td>Day 3</td>
+  <td>给 <code>deepseek</code> CLI 加 <code>--json</code> flag → 注入 <code>StdoutJsonlSink</code>；stdin 起异步任务读 <code>{"approve": ...}</code> 行</td>
+  <td><code>deepseek --json "hello"</code> 能流式吐 JSONL</td>
+</tr>
+<tr>
+  <td>Day 4</td>
+  <td>新建 <code>sdk/typescript/</code>，~200 行写完 <code>DeepSeek</code> 类</td>
+  <td><code>npm link</code> 后能 import 用</td>
+</tr>
+<tr>
+  <td>Day 5</td>
+  <td><code>pnpm create tauri-app</code>，三个组件：<code>&lt;MessageList&gt;</code>、<code>&lt;ApprovalModal&gt;</code>、<code>&lt;Composer&gt;</code></td>
+  <td>能跑起来的 Tauri 窗口</td>
+</tr>
+<tr>
+  <td>Day 6</td>
+  <td>把 <code>deepseek-tui-cli</code> 二进制打成 Tauri sidecar，发布 <code>.dmg</code> / <code>.exe</code></td>
+  <td>用户双击即开</td>
+</tr>
+<tr>
+  <td>Day 7</td>
+  <td>体验打磨：打字机动画、code block 高亮、approve hotkey、错误 toast</td>
+  <td>可演示</td>
+</tr>
+</tbody>
+</table>
+
+<h3>9.1 优先做哪几个 EventFrame 的 UI 渲染？</h3>
+<p>不需要一开始就把全部 15+ 种事件都做完，先做最核心的 5 个：</p>
+<ol>
+  <li><code>ResponseDelta</code>（channel=Text）→ 主对话气泡，<strong>必做</strong></li>
+  <li><code>ResponseDelta</code>（channel=Reasoning）→ 折叠的思考区，可选展开</li>
+  <li><code>ExecApprovalRequest</code> + <code>ApplyPatchApprovalRequest</code> → 模态审批弹窗</li>
+  <li><code>ToolCallStart</code> + <code>ToolCallResult</code> → 行内"调用了 X 工具"卡片</li>
+  <li><code>ExecCommandBegin</code> → 终端块（用 xterm.js 渲染最酷，普通 &lt;pre&gt; 也够）</li>
+</ol>
+
+<h3>9.2 不要在第一周做的事情</h3>
+<ul>
+  <li>❌ 重新设计协议 / 加版本号</li>
+  <li>❌ WebSocket / SSE（先用 stdio 跑通）</li>
+  <li>❌ 多 thread 切换 UI（先做单 thread）</li>
+  <li>❌ 设置面板（用 CLI / config.toml）</li>
+  <li>❌ 多 provider 切换 UI（先固定 DeepSeek-V4-pro）</li>
+</ul>
+
+<div class="callout good">
+  <strong>这就是 Codex 当年内部走过的路径。</strong>
+  Codex 2024 年最早期版本也是子进程 + JSONL 模式，
+  后来才逐步演化出 app-server-transport / 多传输 / SDK / 桌面 app。
+  <strong>不要在第一周追求架构完美，追求"用户能点开就用"。</strong>
+</div>
+</section>
+
+<footer>
+  <p>
+    分析依据：浅克隆 <code>openai/codex</code> @ 12bfb57 和
+    <code>Hmbown/DeepSeek-TUI</code> v0.8.36，对比了
+    <code>app-server*</code> / <code>protocol</code> / <code>sdk/typescript</code> /
+    <code>tui</code> / <code>core</code> 各 crate 的实际源文件。
+    所有引用的文件路径和行号都来自实际代码。
+  </p>
+  <p>生成时间：2026-05-14</p>
+</footer>
+
+</div>
+</body>
+</html>
