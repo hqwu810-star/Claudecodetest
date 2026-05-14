@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenAI Codex CLI vs DeepSeek-TUI 源码对比分析</title>
+<style>
+  :root {
+    --codex: #10a37f;
+    --deepseek: #4f6df5;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --text: #e6e8eb;
+    --muted: #9aa3af;
+    --border: #2a2f3a;
+    --warn: #f5a524;
+    --good: #34d399;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+  header {
+    padding: 36px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  h1 {
+    font-size: 32px;
+    margin: 0 0 8px;
+    background: linear-gradient(90deg, var(--codex), var(--deepseek));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--muted); font-size: 15px; }
+  h2 {
+    font-size: 22px;
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 17px; margin: 24px 0 12px; color: #c9d1d9; }
+  p { margin: 10px 0; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    background: #232830;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: #0b0d12;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  pre code { background: transparent; padding: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; }
+  tr:nth-child(even) td { background: #14171d; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tag-codex { background: rgba(16,163,127,0.18); color: var(--codex); }
+  .tag-ds { background: rgba(79,109,245,0.20); color: #8aa0ff; }
+  .tag-good { background: rgba(52,211,153,0.18); color: var(--good); }
+  .tag-warn { background: rgba(245,165,36,0.18); color: var(--warn); }
+  .tag-bad  { background: rgba(248,113,113,0.18); color: var(--bad); }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card.codex { border-top: 3px solid var(--codex); }
+  .card.ds    { border-top: 3px solid var(--deepseek); }
+  .card h4 { margin: 0 0 10px; font-size: 15px; }
+  .stat {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr;
+    gap: 0;
+    margin: 12px 0;
+  }
+  .stat > div {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+  .stat > div:first-child { background: var(--panel); font-weight: 600; }
+  .stat .val-codex { color: var(--codex); font-variant-numeric: tabular-nums; }
+  .stat .val-ds    { color: #8aa0ff; font-variant-numeric: tabular-nums; }
+  .callout {
+    background: rgba(245,165,36,0.08);
+    border-left: 4px solid var(--warn);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 4px;
+  }
+  .callout.info  { background: rgba(79,109,245,0.08); border-left-color: var(--deepseek); }
+  .callout.good  { background: rgba(52,211,153,0.08); border-left-color: var(--good); }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 22px;
+    margin-bottom: 24px;
+  }
+  .toc ol { padding-left: 22px; margin: 6px 0; }
+  .toc a { color: #aab8ff; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .ratio-bar {
+    display: flex;
+    height: 22px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 6px 0 12px;
+    background: #1a1e26;
+  }
+  .ratio-bar > span {
+    display: inline-block;
+    font-size: 11px;
+    color: white;
+    line-height: 22px;
+    text-align: center;
+    font-weight: 600;
+  }
+  .ratio-codex { background: var(--codex); }
+  .ratio-ds    { background: var(--deepseek); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>OpenAI Codex CLI vs DeepSeek-TUI 源码对比分析</h1>
+  <div class="subtitle">
+    <span class="tag tag-codex">openai/codex @ 12bfb57</span>
+    &nbsp;vs&nbsp;
+    <span class="tag tag-ds">Hmbown/DeepSeek-TUI @ 13e7957 (v0.8.36)</span>
+    &nbsp;·&nbsp; 2026-05-14
+  </div>
+</header>
+
+<div class="toc">
+  <strong>目录</strong>
+  <ol>
+    <li><a href="#tldr">TL;DR — 核心结论</a></li>
+    <li><a href="#overview">项目背景</a></li>
+    <li><a href="#scale">规模对比</a></li>
+    <li><a href="#crates">Crate 结构对比</a></li>
+    <li><a href="#core">核心引擎实现差异</a></li>
+    <li><a href="#sandbox">沙箱与安全</a></li>
+    <li><a href="#tools">工具系统与扩展</a></li>
+    <li><a href="#provider">模型与 Provider</a></li>
+    <li><a href="#unique-features">独有特性对比</a></li>
+    <li><a href="#license">许可证与衍生关系</a></li>
+    <li><a href="#summary">综合评价</a></li>
+  </ol>
+</div>
+
+<section id="tldr">
+<h2>1. TL;DR — 核心结论</h2>
+
+<div class="callout info">
+  <strong>一句话：</strong>DeepSeek-TUI 是一个<strong>"Codex 风格"</strong>的精简重实现，
+  架构布局几乎照抄 Codex（11/14 crate 重名），但代码量只有 Codex 的 ~26%，
+  把 Codex 庞大的多 crate 拆分大量收敛进了单个 <code>lib.rs</code>，
+  并替换 Provider 为 DeepSeek 系列，新增"前缀缓存可观测性"和阿里 OpenSandbox 外部沙箱后端。
+</div>
+
+<ul>
+  <li>Codex：<strong>93 个 crate，约 88 万行 Rust</strong>，OpenAI 出品，Apache-2.0</li>
+  <li>DeepSeek-TUI：<strong>14 个 crate，约 23 万行 Rust</strong>，社区第三方，MIT（无 NOTICE/归属）</li>
+  <li>DeepSeek-TUI 的 <code>app-server</code> Cargo.toml 自述为
+      "<em>Codex-style app-server transport for DeepSeek workspace architecture</em>"</li>
+  <li>非 TUI 核心 crate（core/protocol/tools/config 等）DS 几乎全部塞进单个 <code>lib.rs</code>，
+      而 Codex 拆成数十乃至上百个文件 + 单测文件</li>
+  <li>TUI 层差距最小：DS 285 个 .rs 文件 vs Codex 305 个，<strong>用户面体验对齐基本到位</strong></li>
+</ul>
+</section>
+
+<section id="overview">
+<h2>2. 项目背景</h2>
+<div class="grid-2">
+  <div class="card codex">
+    <h4><span class="tag tag-codex">OpenAI Codex CLI</span></h4>
+    <ul>
+      <li>定位：OpenAI 官方终端 coding agent</li>
+      <li>分发：<code>npm i -g @openai/codex</code> / brew / GitHub Releases</li>
+      <li>认证：支持 ChatGPT 账号登陆 + API key</li>
+      <li>仓库根目录：<code>codex-rs/</code>（Rust 工作区）+ <code>codex-cli/</code>（npm 包装）+ <code>sdk/</code></li>
+      <li>许可证：Apache-2.0</li>
+    </ul>
+  </div>
+  <div class="card ds">
+    <h4><span class="tag tag-ds">DeepSeek-TUI</span></h4>
+    <ul>
+      <li>定位：DeepSeek V4 模型的终端 coding agent（社区项目）</li>
+      <li>分发：<code>npm i -g deepseek-tui</code> / cargo / brew / docker</li>
+      <li>认证：DeepSeek API key（也兼容 OpenAI 协议、Ollama 等）</li>
+      <li>仓库根目录：<code>crates/</code> + <code>npm/</code> + <code>web/</code> + <code>website/</code></li>
+      <li>许可证：MIT（"DeepSeek CLI Contributors"）</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<section id="scale">
+<h2>3. 规模对比</h2>
+
+<div class="stat">
+  <div>指标</div>
+  <div style="background:var(--panel);color:var(--codex);font-weight:600;">Codex</div>
+  <div style="background:var(--panel);color:#8aa0ff;font-weight:600;">DeepSeek-TUI</div>
+</div>
+<div class="stat"><div>Workspace crate 数</div><div class="val-codex">93</div><div class="val-ds">14</div></div>
+<div class="stat"><div>Rust 源码总行数</div><div class="val-codex">877,459</div><div class="val-ds">226,699</div></div>
+<div class="stat"><div>core 子模块 .rs 文件</div><div class="val-codex">433</div><div class="val-ds">1 (单 lib.rs)</div></div>
+<div class="stat"><div>tui 子模块 .rs 文件</div><div class="val-codex">305</div><div class="val-ds">285</div></div>
+<div class="stat"><div>app-server .rs 文件</div><div class="val-codex">150</div><div class="val-ds">2</div></div>
+<div class="stat"><div>config .rs 文件</div><div class="val-codex">40</div><div class="val-ds">1</div></div>
+<div class="stat"><div>protocol .rs 文件</div><div class="val-codex">30</div><div class="val-ds">2</div></div>
+<div class="stat"><div>tools .rs 文件</div><div class="val-codex">28</div><div class="val-ds">2</div></div>
+
+<h3>代码量比例直观图</h3>
+<div class="ratio-bar">
+  <span class="ratio-codex" style="width:79.5%;">Codex 877k 行 (~79.5%)</span>
+  <span class="ratio-ds"    style="width:20.5%;">DS 227k 行</span>
+</div>
+
+<div class="callout">
+  <strong>结构差异最大的发现：</strong>
+  DeepSeek-TUI 把 Codex 拆成 100+ 个 .rs 文件的 <code>core</code> crate
+  压缩成一个 <code>1702 行的 lib.rs</code>。这意味着 DS 选择了
+  "<strong>同名 crate + 单文件实现</strong>" 的策略 —— 表面架构对齐 Codex，
+  内部实现重新写、且大量功能并未实现或被精简。
+</div>
+</section>
+
+<section id="crates">
+<h2>4. Crate 结构对比</h2>
+
+<h3>4.1 同名 crate（11 个）</h3>
+<p>这是 DS 与 Codex 高度相似的部分，crate 名一一对应：</p>
+<table>
+<thead><tr><th>Crate 名</th><th>Codex 用途</th><th>DS 实现规模</th></tr></thead>
+<tbody>
+<tr><td><code>core</code></td><td>引擎主循环、turn-loop、会话管理</td><td>单 lib.rs 1702 行</td></tr>
+<tr><td><code>tui</code></td><td>ratatui 渲染、命令面板、审批弹窗</td><td>285 个 .rs 文件 ✓ 对齐</td></tr>
+<tr><td><code>cli</code></td><td>命令行解析与分发</td><td>5 个 .rs 文件</td></tr>
+<tr><td><code>app-server</code></td><td>HTTP/SSE API server</td><td>2 个 .rs 文件</td></tr>
+<tr><td><code>protocol</code></td><td>LLM/tool 协议类型</td><td>单 lib.rs</td></tr>
+<tr><td><code>tools</code></td><td>工具注册表与执行</td><td>单 lib.rs</td></tr>
+<tr><td><code>execpolicy</code></td><td>命令白名单/策略</td><td>2 个 .rs（含 bash_arity）</td></tr>
+<tr><td><code>config</code></td><td>TOML 配置加载</td><td>单 lib.rs</td></tr>
+<tr><td><code>hooks</code></td><td>前置/后置钩子</td><td>单 lib.rs</td></tr>
+<tr><td><code>secrets</code></td><td>凭据/keystore</td><td>单 lib.rs</td></tr>
+<tr><td><code>state</code></td><td>会话/任务持久化</td><td>单 lib.rs</td></tr>
+</tbody>
+</table>
+
+<h3>4.2 仅 DeepSeek-TUI 有的 crate</h3>
+<ul>
+  <li><code>agent</code> — Model/provider 注册表与回退策略（DS 自定义抽象）</li>
+  <li><code>mcp</code> — MCP 客户端管理（Codex 把 MCP 拆成 <code>codex-mcp</code> /
+      <code>mcp-server</code> / <code>rmcp-client</code> 三个 crate）</li>
+  <li><code>tui-core</code> — TUI 通用组件复用</li>
+</ul>
+
+<h3>4.3 Codex 独有的关键 crate（远不止下面这些）</h3>
+<table>
+<thead><tr><th>Crate</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>chatgpt</code></td><td>ChatGPT 账号登录集成</td></tr>
+<tr><td><code>cloud-tasks</code> + <code>cloud-tasks-client</code></td><td>Codex Cloud 异步任务</td></tr>
+<tr><td><code>memories</code></td><td>跨会话记忆与引用</td></tr>
+<tr><td><code>realtime-webrtc</code></td><td>语音模式（WebRTC）</td></tr>
+<tr><td><code>mcp-server</code></td><td>作为 <em>MCP 服务端</em> 暴露能力</td></tr>
+<tr><td><code>analytics</code></td><td>遥测/分析</td></tr>
+<tr><td><code>aws-auth</code> / <code>lmstudio</code> / <code>ollama</code></td><td>独立 Provider 适配 crate</td></tr>
+<tr><td><code>sandboxing</code> / <code>linux-sandbox</code> / <code>bwrap</code> / <code>windows-sandbox-rs</code> / <code>process-hardening</code></td><td>专门的多 crate 沙箱栈</td></tr>
+<tr><td><code>file-watcher</code></td><td>文件系统变更监听</td></tr>
+<tr><td><code>rmcp-client</code></td><td>实验性 RMCP 协议</td></tr>
+<tr><td><code>collaboration-mode-templates</code></td><td>协作模板</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="core">
+<h2>5. 核心引擎实现差异</h2>
+
+<h3>5.1 Codex core/src（部分文件清单）</h3>
+<pre><code>agent/                  agents_md.rs          apply_patch.rs
+arc_monitor.rs          attestation.rs        client.rs
+codex_delegate.rs       codex_thread.rs       command_canonicalization.rs
+compact.rs              compact_remote.rs     compact_remote_v2.rs
+config/                 connectors.rs         context/
+context_manager/        environment_selection.rs  event_mapping.rs
+exec.rs                 exec_env.rs           exec_policy.rs
+... (共 433 个 .rs 文件，含大量 *_tests.rs)</code></pre>
+
+<h3>5.2 DeepSeek-TUI core 是一个文件</h3>
+<pre><code>crates/core/
+├── Cargo.toml
+└── src/
+    └── lib.rs    // 1702 行：Runtime + ThreadManager + JobManager + invoke_tool</code></pre>
+
+<p>DS 的 <code>Runtime</code> 把以下职责全塞进一个 struct：</p>
+<ul>
+  <li>ModelRegistry（模型注册）</li>
+  <li>ThreadManager（线程/会话生命周期：新建、fork、resume）</li>
+  <li>JobManager（任务队列 + 指数退避重试，<code>DEFAULT_JOB_MAX_ATTEMPTS=3</code>，<code>BACKOFF_BASE_MS=500</code>）</li>
+  <li>ExecPolicyEngine（执行策略检查）</li>
+  <li>HookDispatcher（钩子分发）</li>
+  <li>McpManager（MCP 客户端）</li>
+  <li>StateStore（持久化）</li>
+  <li>ToolRegistry（工具注册）</li>
+</ul>
+
+<p>Codex 把这一切拆成数十个独立模块（<code>codex_thread.rs</code>、<code>thread_manager_sample</code>、
+<code>arc_monitor.rs</code>、<code>compact.rs</code> 等），并附带成体系的 <code>*_tests.rs</code> 单测文件。</p>
+
+<div class="callout">
+  <strong>架构启示：</strong>
+  DS 的设计在原型阶段更易读、改动半径小；Codex 的设计则更利于多人协作、单测隔离、长周期演进。
+  对于一个 28k stars 的项目来说，DS 的核心模块"超大单文件"是后续重构的隐患。
+</div>
+</section>
+
+<section id="sandbox">
+<h2>6. 沙箱与安全</h2>
+
+<table>
+<thead><tr><th>维度</th><th>Codex</th><th>DeepSeek-TUI</th></tr></thead>
+<tbody>
+<tr>
+  <td>沙箱代码组织</td>
+  <td>5 个专用 crate（<code>sandboxing</code> + <code>linux-sandbox</code> + <code>bwrap</code> + <code>windows-sandbox-rs</code> + <code>process-hardening</code>），约 <strong>28,000 行</strong></td>
+  <td><code>crates/tui/src/sandbox/</code> 7 个文件，约 <strong>2,286 行</strong></td>
+</tr>
+<tr>
+  <td>macOS 实现</td>
+  <td>独立 <code>sandboxing/src/seatbelt.rs</code>，依赖 <code>codex_protocol::permissions</code> 复杂权限模型，含 <code>seatbelt_base_policy.sbpl</code> 静态资源文件</td>
+  <td><code>tui/src/sandbox/seatbelt.rs</code> 681 行，内嵌简化 SBPL，注释友好但权限模型扁平</td>
+</tr>
+<tr>
+  <td>Linux 实现</td>
+  <td>专用 <code>linux-sandbox</code> crate + <code>bwrap</code> 辅助进程；带 landlock + seccomp + bwrap 三档</td>
+  <td><code>tui/src/sandbox/landlock.rs</code> 344 行，仅 landlock</td>
+</tr>
+<tr>
+  <td>Windows 实现</td>
+  <td>独立 <code>windows-sandbox-rs</code> crate</td>
+  <td><code>tui/src/sandbox/windows.rs</code> 66 行（占位级别）</td>
+</tr>
+<tr>
+  <td>独有特性</td>
+  <td><code>process-hardening</code>（进程强化、防注入）、网络代理拦截 (<code>NetworkProxy</code>)</td>
+  <td><code>sandbox/backend.rs</code> + <code>opensandbox.rs</code> — <strong>阿里 OpenSandbox 远程执行后端</strong>，把 shell 命令路由到外部服务，是 Codex 没有的</td>
+</tr>
+<tr>
+  <td>execpolicy</td>
+  <td>11 个 .rs 文件 + 独立 <code>execpolicy-legacy</code></td>
+  <td><code>lib.rs</code> + <code>bash_arity.rs</code>（共 1002 行）</td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <strong>核心差距：</strong>
+  Codex 的沙箱是<strong>生产级深度防御</strong>（5 crate / 28k 行 / 含 base policy 资源文件），
+  DS 的沙箱是<strong>"够用即可"</strong>（2.2k 行 / 单 module）。
+  Windows 实现差距尤其明显（Codex 独立 crate vs DS 66 行占位）。
+</div>
+</section>
+
+<section id="tools">
+<h2>7. 工具系统与扩展</h2>
+
+<h3>7.1 工具注册</h3>
+<table>
+<thead><tr><th></th><th>Codex tools crate</th><th>DS tools crate</th></tr></thead>
+<tbody>
+<tr><td>文件</td><td>code_mode / dynamic_tool / mcp_tool / json_schema / responses_api / image_detail 等 28 个 .rs</td><td>单 <code>lib.rs</code></td></tr>
+<tr><td>抽象</td><td>多套 Tool trait（dynamic_tool, mcp_tool, code_mode）+ JSON Schema 验证</td><td>统一的 <code>ToolCapability</code> + <code>ApprovalRequirement</code> 枚举 + <code>ToolError</code></td></tr>
+<tr><td>能力分类</td><td>细粒度（含 <code>code_mode</code> 专门工具）</td><td>枚举 6 项：ReadOnly / WritesFiles / ExecutesCode / Network / Sandboxable / RequiresApproval</td></tr>
+</tbody>
+</table>
+
+<h3>7.2 MCP（Model Context Protocol）</h3>
+<ul>
+  <li><span class="tag tag-codex">Codex</span> 拆 3 个 crate：<code>codex-mcp</code>（核心）、
+      <code>mcp-server</code>（作为服务端）、<code>rmcp-client</code>（远程 MCP 实验）</li>
+  <li><span class="tag tag-ds">DS</span> 单一 <code>crates/mcp/src/lib.rs</code>，只做客户端</li>
+</ul>
+
+<h3>7.3 Hooks</h3>
+<ul>
+  <li>Codex：<code>hooks</code> crate 26 个 .rs 文件，支持复杂条件/事件分发</li>
+  <li>DS：单 <code>lib.rs</code></li>
+</ul>
+</section>
+
+<section id="provider">
+<h2>8. 模型与 Provider 抽象</h2>
+
+<div class="grid-2">
+  <div class="card codex">
+    <h4>Codex Provider 栈</h4>
+    <ul>
+      <li>核心：<code>model-provider</code> + <code>model-provider-info</code> +
+          <code>models-manager</code></li>
+      <li>专属 crate：<code>chatgpt</code>、<code>aws-auth</code>、
+          <code>lmstudio</code>、<code>ollama</code></li>
+      <li>OpenAI Responses API 优先（<code>responses-api-proxy</code>、
+          <code>codex-backend-openapi-models</code>）</li>
+      <li>支持 ChatGPT 账号登录（OAuth）</li>
+    </ul>
+  </div>
+  <div class="card ds">
+    <h4>DS Provider 栈</h4>
+    <ul>
+      <li>单一 <code>agent</code> crate 注册所有模型</li>
+      <li>默认 <code>deepseek-v4-pro</code> / <code>deepseek-v4-flash</code></li>
+      <li>OpenAI 兼容协议作为通用回退</li>
+      <li>支持自托管：SGLang / vLLM / Ollama / NVIDIA NIM / Fireworks /
+          AtlasCloud（统一走 OpenAI 兼容接口）</li>
+      <li><strong>独有：前缀缓存稳定性追踪</strong>（footer 显示最近 N 轮 prefix-cache 命中率，
+          利用 DeepSeek 定价中 cache hit 1/120 cache miss 的成本结构）</li>
+    </ul>
+  </div>
+</div>
+
+<h3>定价对比示例（DS 引用 DeepSeek 官方）</h3>
+<table>
+<thead><tr><th>模型</th><th>Context</th><th>Cache Hit</th><th>Cache Miss</th><th>Output</th></tr></thead>
+<tbody>
+<tr><td>deepseek-v4-pro</td><td>1M</td><td>$0.003625/1M</td><td>$0.435/1M</td><td>$0.87/1M</td></tr>
+<tr><td>deepseek-v4-flash</td><td>1M</td><td>$0.0028/1M</td><td>$0.14/1M</td><td>$0.28/1M</td></tr>
+</tbody>
+</table>
+<p>这种 <strong>1:120 的缓存 vs 未缓存价差</strong>是 DS 重点投入"prefix-cache 可观测性"的根本驱动力，
+是相对 Codex 的差异化产品决策。</p>
+</section>
+
+<section id="unique-features">
+<h2>9. 独有特性对比</h2>
+
+<div class="grid-2">
+  <div class="card codex">
+    <h4><span class="tag tag-codex">Codex 独有</span></h4>
+    <ul>
+      <li>ChatGPT 账号登录（含 OAuth / 订阅集成）</li>
+      <li>Codex Cloud（云端异步任务、跨设备同步）</li>
+      <li>跨会话 Memories（带引用）</li>
+      <li>语音模式（<code>voice.rs</code> + <code>realtime-webrtc</code>）</li>
+      <li>作为 MCP <em>服务端</em>（被其他客户端调用）</li>
+      <li>遥测/分析 (<code>analytics</code> crate)</li>
+      <li>IDE 集成上下文 (<code>ide_context.rs</code>)</li>
+      <li>Bazel 构建系统（<code>BUILD.bazel</code>、<code>MODULE.bazel</code>）</li>
+      <li>更完整的 SDK（<code>sdk/</code> 顶层目录）</li>
+      <li>桌面应用（<code>codex app</code>）</li>
+    </ul>
+  </div>
+  <div class="card ds">
+    <h4><span class="tag tag-ds">DeepSeek-TUI 独有</span></h4>
+    <ul>
+      <li>DeepSeek V4 原生支持（pro/flash auto 切换）</li>
+      <li>1M token 上下文 + <strong>prefix-cache 稳定性 footer chip</strong></li>
+      <li>阿里 OpenSandbox 远程执行后端</li>
+      <li>飞书桥接（<code>integrations/feishu-bridge/</code>）</li>
+      <li>腾讯 Lighthouse 一键部署模板</li>
+      <li>i18n 多语言 README（zh-CN / ja-JP）+ locale 配置</li>
+      <li>RLM (Recursive LM) — 持久化 Python REPL，配合 <code>deepseek-v4-flash</code>
+          做廉价子查询（<code>peek</code> / <code>chunk</code> / <code>sub_query_batch</code>）</li>
+      <li>工作区 side-git 回滚（<code>/restore</code> / <code>revert_turn</code>，不污染用户 .git）</li>
+      <li>中国大陆友好镜像安装说明</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<section id="license">
+<h2>10. 许可证与衍生关系</h2>
+
+<table>
+<thead><tr><th></th><th>Codex</th><th>DeepSeek-TUI</th></tr></thead>
+<tbody>
+<tr><td>许可证</td><td>Apache-2.0</td><td>MIT</td></tr>
+<tr><td>版权声明</td><td>"OpenAI"</td><td>"DeepSeek CLI Contributors"</td></tr>
+<tr><td>NOTICE 文件</td><td>有</td><td><span class="tag tag-bad">无</span></td></tr>
+<tr><td>归属/Attribution</td><td>—</td><td>仅在 <code>app-server/Cargo.toml</code> 描述里出现 "Codex-style"</td></tr>
+</tbody>
+</table>
+
+<h3>10.1 衍生关系的证据</h3>
+<ul>
+  <li><span class="tag tag-good">证据</span> DS crate 名 11/14 与 Codex 完全一致：
+      <code>core, tui, cli, app-server, protocol, tools, execpolicy, config, hooks, secrets, state</code></li>
+  <li><span class="tag tag-good">证据</span> DS workspace 与 Codex 同样以
+      <code>cli + app-server + tui</code> 为 default-members</li>
+  <li><span class="tag tag-good">证据</span> DS 自述
+      "Codex-style app-server transport for DeepSeek workspace architecture"</li>
+  <li><span class="tag tag-good">证据</span> 沙箱 / 工具 / hooks / 状态持久化路径
+      (<code>~/.deepseek/</code>) 与 Codex (<code>~/.codex/</code>) 的目录布局完全对应</li>
+  <li><span class="tag tag-warn">反证</span> 单文件源码内容并非逐行复制：
+      seatbelt.rs、core/lib.rs 等关键文件都是<strong>重新编写</strong>，
+      变量命名、注释风格、模块依赖关系不同</li>
+</ul>
+
+<div class="callout">
+  <strong>结论：</strong>
+  DeepSeek-TUI 大概率是<strong>"clean-room re-implementation"</strong>风格的项目 ——
+  深度参考 Codex 的架构、crate 名、目录布局，但代码本身重写。
+  这种关系在开源界并不少见，但 <span class="tag tag-warn">即便代码全部重写，
+  也建议在 NOTICE 或 README 中显式致谢 Codex</span>，
+  尤其当目录结构高度一致时，可以避免社区争议。
+</div>
+</section>
+
+<section id="summary">
+<h2>11. 综合评价</h2>
+
+<table>
+<thead><tr><th>维度</th><th>Codex</th><th>DeepSeek-TUI</th></tr></thead>
+<tbody>
+<tr><td>规模与工程化</td><td>★★★★★（93 crate / 88 万行 / 完整单测体系）</td><td>★★★（14 crate / 23 万行 / 单测稀疏）</td></tr>
+<tr><td>沙箱与安全</td><td>★★★★★（5 个专用 crate，含 process-hardening）</td><td>★★★（核心场景覆盖，Windows 实现薄弱）</td></tr>
+<tr><td>Provider 生态</td><td>★★★★（ChatGPT 登录、AWS、LMStudio、Ollama 各有 crate）</td><td>★★★★（DeepSeek 原生 + 大量 OpenAI 兼容回退）</td></tr>
+<tr><td>独有体验</td><td>★★★★（语音、Cloud、Memories、桌面）</td><td>★★★★（1M context、prefix-cache、RLM、回滚）</td></tr>
+<tr><td>可维护性</td><td>★★★★★</td><td>★★（核心 lib.rs 单文件 1700+ 行）</td></tr>
+<tr><td>中国本地化</td><td>★★（基础 i18n）</td><td>★★★★★（飞书/腾讯云/镜像/中文 README/OpenSandbox）</td></tr>
+<tr><td>许可证清晰度</td><td>★★★★★（Apache-2.0 + NOTICE）</td><td>★★（无 NOTICE，归属缺失）</td></tr>
+</tbody>
+</table>
+
+<h3>11.1 适用建议</h3>
+<ul>
+  <li>需要<strong>稳定、生产级、强沙箱</strong>的英文用户 → <strong>Codex</strong></li>
+  <li>需要<strong>长上下文 + 低成本（prefix-cache）+ DeepSeek 模型</strong>，可以接受工程化稍弱 → <strong>DeepSeek-TUI</strong></li>
+  <li>希望<strong>自己改造 / fork</strong> 一个本地 coding agent → 推荐从
+      <strong>DeepSeek-TUI</strong> 入手，因为其 crate 数少、单文件实现易于通读理解；
+      在通读 DS 后再回看 Codex 会大幅降低阅读门槛</li>
+</ul>
+
+<h3>11.2 给 DeepSeek-TUI 维护者的建议</h3>
+<ul>
+  <li>把核心 1702 行的 <code>core/src/lib.rs</code> 拆分为模块，至少分出
+      <code>thread_manager.rs</code> / <code>job_manager.rs</code> / <code>runtime.rs</code>，
+      参考 Codex <code>core/src/</code> 的命名</li>
+  <li>补 NOTICE 文件，显式致谢 Codex 的架构启发，降低衍生争议风险</li>
+  <li>Windows 沙箱 66 行的占位实现需要补强，可以参考 Codex 的
+      <code>windows-sandbox-rs</code> crate</li>
+  <li>给 core/protocol/tools 等关键模块补单测文件（Codex 的 <code>*_tests.rs</code> 模式很值得抄）</li>
+</ul>
+</section>
+
+<footer>
+  <p>
+    分析方法：浅克隆两个仓库（codex @ 12bfb57，DeepSeek-TUI v0.8.36 @ 13e7957），
+    对比顶层目录、crate 列表、文件计数、Cargo.toml 依赖、核心源文件 head、许可证。
+    所有数字均直接来自 <code>find</code> / <code>wc -l</code> / <code>ls</code> 实际输出。
+  </p>
+  <p>生成时间：2026-05-14</p>
+</footer>
+
+</div>
+</body>
+</html>
