@@ -7,7 +7,7 @@ function ProductCard({ product }) {
       <Link to={`/product/${product.id}`}>
         <div className="product-image">
           <img src={product.image} alt={product.name} />
-          {product.discount && <span className="product-sale-badge">SALE</span>}
+          {product.discount && <span className="product-sale-badge">促销</span>}
         </div>
         <div className="product-info">
           <h3>{product.name}</h3>
